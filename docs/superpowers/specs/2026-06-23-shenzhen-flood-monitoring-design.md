@@ -267,14 +267,136 @@
 - 错误信息。
 - 原始文件路径。
 
-### 4.8 系统预留表
+### 4.8 二期空间与业务扩展表
 
-以下表正式架构预留，一期可以不实现：
+二期需要在 PostGIS 中补齐降雨、道路、历史易涝点、告警、工单、用户审计和预测结果。以下表一期可以不落地，但顶层设计需要提前确认，避免后续接口和页面反复返工。
 
-- `users`
-- `roles`
-- `audit_logs`
-- `model_predictions`
+`rainfall_observations` 用于存储降雨观测：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `station_code` | 雨量站编码 |
+| `station_name` | 雨量站名称 |
+| `observed_at` | 观测时间 |
+| `rainfall_mm` | 降雨量，单位毫米 |
+| `duration_minutes` | 统计时长 |
+| `geom` | PostGIS 空间点 |
+| `source_file` | 来源文件 |
+
+`road_segments` 用于道路图层展示：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `road_name` | 道路名称 |
+| `district_name` | 所属行政区 |
+| `road_level` | 道路等级 |
+| `status` | 启用状态 |
+| `geom` | PostGIS LineString 或 MultiLineString |
+| `source` | 数据来源 |
+
+`historical_flood_points` 用于历史易涝点图层：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `name` | 易涝点名称 |
+| `district_name` | 所属行政区 |
+| `risk_note` | 风险说明 |
+| `source` | 数据来源 |
+| `geom` | PostGIS 空间点或面 |
+
+`alerts` 用于站内告警中心：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `point_id` | 关联监测点 |
+| `alert_level` | 告警等级 |
+| `alert_type` | 告警类型，例如 water_level、data_delay |
+| `status` | active、acknowledged、closed |
+| `triggered_at` | 触发时间 |
+| `acknowledged_by` | 确认人 |
+| `acknowledged_at` | 确认时间 |
+| `closed_at` | 关闭时间 |
+
+`work_orders` 用于处置工单：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `alert_id` | 关联告警 |
+| `point_id` | 关联监测点 |
+| `title` | 工单标题 |
+| `status` | new、assigned、processing、completed、closed |
+| `assignee_id` | 处理人 |
+| `created_at` | 创建时间 |
+| `completed_at` | 完成时间 |
+
+`users`、`roles`、`user_roles` 用于基础权限：
+
+| 字段 | 含义 |
+|---|---|
+| `users.id` | 用户主键 |
+| `users.username` | 登录名 |
+| `users.display_name` | 展示名 |
+| `users.password_hash` | 密码哈希 |
+| `users.enabled` | 是否启用 |
+| `roles.id` | 角色主键 |
+| `roles.code` | 角色编码 |
+| `roles.name` | 角色名称 |
+| `user_roles.user_id` | 用户 ID |
+| `user_roles.role_id` | 角色 ID |
+
+`audit_logs` 用于记录后台关键操作：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `user_id` | 操作人 |
+| `action` | 操作类型 |
+| `target_type` | 操作对象类型 |
+| `target_id` | 操作对象 ID |
+| `detail` | 操作详情 |
+| `created_at` | 操作时间 |
+
+`model_predictions` 用于规则型预测结果展示：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 主键 |
+| `point_id` | 监测点 ID |
+| `predicted_for` | 预测目标时间 |
+| `predicted_risk_level` | 预测风险等级 |
+| `predicted_trend` | 预测趋势 |
+| `confidence` | 置信度 |
+| `model_version` | 规则或模型版本 |
+| `created_at` | 生成时间 |
+
+`sync_jobs` 和 `sync_job_runs` 用于后端调度：
+
+| 字段 | 含义 |
+|---|---|
+| `sync_jobs.id` | 任务主键 |
+| `sync_jobs.job_type` | 任务类型 |
+| `sync_jobs.enabled` | 是否启用 |
+| `sync_jobs.schedule` | 定时配置 |
+| `sync_job_runs.id` | 执行记录主键 |
+| `sync_job_runs.job_id` | 关联任务 |
+| `sync_job_runs.status` | running、success、failed |
+| `sync_job_runs.started_at` | 开始时间 |
+| `sync_job_runs.finished_at` | 结束时间 |
+| `sync_job_runs.error_message` | 失败原因 |
+
+### 4.9 二期索引与数据口径
+
+PostGIS 版本需要为 `geom` 字段建立空间索引，为 `observed_at`、`point_id`、`status`、`alert_level` 等常用过滤字段建立普通索引。业务口径保持和一期一致：
+
+- `water_level_m IS NULL` 的记录进入原始层和历史明细，但不参与风险等级计算。
+- 完全重复的 `source_record_id` 不重复进入业务统计。
+- 地图点位只使用审核通过坐标。
+- 降雨、道路、历史易涝点数据源不稳定时，允许使用可信样例数据先完成图层接口和前端开关。
 
 ## 5. 高德地图前后端设计
 
@@ -351,7 +473,83 @@
 
 返回最近导入批次和数据源状态。
 
-### 5.3 地图展示规则
+### 5.3 二期后端接口
+
+二期接口继续放在 `/api/` 下，保持前后端分离。接口先满足演示闭环，复杂筛选和导出能力后续增强。
+
+`POST /api/sync-jobs/{id}/run`
+
+手动触发数据同步任务，返回执行记录 ID、开始时间和当前状态。
+
+`GET /api/sync-jobs/runs/latest`
+
+返回最近一次同步任务状态、成功失败结果、行数统计和失败原因。
+
+`GET /api/thresholds`
+
+返回全局阈值和点位级阈值配置。
+
+`PUT /api/thresholds/{id}`
+
+更新阈值配置，并触发对应点位风险重算。
+
+`GET /api/alerts`
+
+返回告警列表，支持按状态、等级、行政区、点位和时间范围筛选。
+
+`GET /api/alerts/{id}`
+
+返回告警详情，包括触发点位、触发水位、阈值、趋势和关联工单。
+
+`POST /api/alerts/{id}/acknowledge`
+
+确认告警，记录确认人、确认时间和审计日志。
+
+`GET /api/layers/rainfall`
+
+返回降雨点位或网格图层数据，用于地图叠加展示。
+
+`GET /api/layers/roads`
+
+返回道路图层 GeoJSON 或简化线数据。
+
+`GET /api/layers/historical-flood-points`
+
+返回历史易涝点图层数据。
+
+`GET /api/work-orders`
+
+返回处置工单列表，支持按状态、处理人、告警和点位筛选。
+
+`POST /api/work-orders`
+
+从告警或点位创建工单。
+
+`PATCH /api/work-orders/{id}/status`
+
+推进工单状态，支持 new、assigned、processing、completed、closed。
+
+`GET /api/predictions`
+
+返回点位预测结果，支持按点位、行政区和预测时间筛选。
+
+`POST /api/auth/login`
+
+登录接口，返回基础会话或令牌，用于保护后台页面。
+
+`GET /api/users`
+
+返回用户列表，用于用户和角色基础管理。
+
+`GET /api/roles`
+
+返回角色列表，用于页面保护和后台权限展示。
+
+`GET /api/audit-logs`
+
+返回审计日志，支持按用户、操作类型和时间范围筛选。
+
+### 5.4 地图展示规则
 
 风险颜色：
 
@@ -370,6 +568,14 @@ Marker 弹窗展示：
 - 观测时间。
 - 所属行政区。
 - 历史曲线入口。
+
+二期弹窗可增加：
+
+- 告警状态。
+- 点位级阈值。
+- 降雨摘要。
+- 预测风险。
+- 创建工单入口。
 
 ## 6. 前端页面功能
 
@@ -437,6 +643,57 @@ Marker 弹窗展示：
 - 错误信息。
 - 原始文件路径。
 
+### 6.5 二期后台页面
+
+二期后台页面围绕防汛处置主链路展开，不追求复杂管理平台，优先保证告警、阈值、调度、工单和审计可演示。
+
+告警中心：
+
+- 告警列表。
+- 告警等级、状态、行政区和时间筛选。
+- 告警详情。
+- 告警确认。
+- 从告警创建工单。
+
+阈值配置页：
+
+- 全局阈值配置。
+- 点位级阈值配置。
+- 启用或停用点位级阈值。
+- 保存后提示风险重算状态。
+
+调度状态页：
+
+- 同步任务列表。
+- 最近运行状态。
+- 手动触发同步。
+- 失败原因查看。
+
+审计日志页：
+
+- 操作人筛选。
+- 操作类型筛选。
+- 操作对象和时间查看。
+
+处置工单页：
+
+- 工单列表。
+- 创建、分派、处理中、完成、关闭状态流转。
+- 关联告警和点位详情入口。
+
+预测结果页：
+
+- 未来风险等级列表。
+- 预测趋势展示。
+- 点位详情中的预测摘要。
+
+扩展图层能力：
+
+- 降雨图层开关和图例。
+- 道路图层开关和图例。
+- 历史易涝点图层开关和图例。
+- 图层缺数据时显示空状态，不阻断核心积涝点地图。
+
 ## 7. 后端项目框架
 
 建议目录结构：
@@ -455,27 +712,59 @@ backend/
       routes_stats.py
       routes_locations.py
       routes_imports.py
+      routes_sync_jobs.py
+      routes_thresholds.py
+      routes_alerts.py
+      routes_layers.py
+      routes_work_orders.py
+      routes_predictions.py
+      routes_auth.py
+      routes_users.py
+      routes_audit_logs.py
     models/
       point.py
       water_level.py
       threshold.py
       district.py
       import_batch.py
+      alert.py
+      work_order.py
+      user.py
+      role.py
+      audit_log.py
+      prediction.py
+      user.py
+      layer.py
+      sync_job.py
     schemas/
       point.py
       map.py
       stats.py
       location.py
+      alert.py
+      work_order.py
+      prediction.py
+      layer.py
+      sync_job.py
     services/
       risk_service.py
       trend_service.py
       map_service.py
       geocode_service.py
       import_service.py
+      alert_service.py
+      threshold_service.py
+      work_order_service.py
+      prediction_service.py
+      auth_service.py
+      user_service.py
+      audit_service.py
     repositories/
       point_repo.py
       water_level_repo.py
       district_repo.py
+      alert_repo.py
+      work_order_repo.py
     tasks/
       sync_open_data.py
   tests/
@@ -505,6 +794,15 @@ frontend/
       points.ts
       stats.ts
       locations.ts
+      alerts.ts
+      thresholds.ts
+      layers.ts
+      workOrders.ts
+      predictions.ts
+      syncJobs.ts
+      auth.ts
+      users.ts
+      auditLogs.ts
     map/
       MapProvider.ts
       AMapProvider.ts
@@ -513,15 +811,26 @@ frontend/
       HistoryQuery.vue
       LocationReview.vue
       DataStatus.vue
+      AlertCenter.vue
+      ThresholdSettings.vue
+      SyncStatus.vue
+      AuditLogs.vue
+      WorkOrders.vue
+      PredictionResults.vue
     components/
       RiskSummaryPanel.vue
       DistrictStatsPanel.vue
       HighRiskList.vue
       PointPopup.vue
       WaterLevelChart.vue
+      LayerLegend.vue
+      AlertDetailPanel.vue
+      WorkOrderStatusStepper.vue
     stores/
       mapStore.ts
       statusStore.ts
+      alertStore.ts
+      layerStore.ts
 ```
 
 前端设计重点：
@@ -553,9 +862,55 @@ frontend/
 
 趋势可基于最近若干条观测值计算。一期只做解释性趋势，不做复杂预测。
 
-## 10. 建设路线
+二期风险计算优先使用点位级阈值；没有点位级阈值时回退到全局阈值。阈值更新后，应重算对应点位最新状态，并根据新风险结果生成或关闭告警。告警生成要保证幂等：同一告警条件已经存在 active 告警时，不重复生成新告警。
 
-### 10.1 一期验收成果
+## 10. 主链路与异常降级
+
+### 10.1 数据同步链路
+
+```text
+开放数据接口 -> 原始 JSON/CSV 归档 -> 导入数据库 -> 数据质量检查 -> 最新状态快照 -> 风险与趋势计算 -> 地图和统计 API
+```
+
+一期使用脚本手动运行或命令行触发。二期把脚本能力纳入 `sync_jobs`，支持手动触发、定时执行、状态记录和失败原因查看。
+
+### 10.2 告警处置链路
+
+```text
+最新水位状态 -> 阈值匹配 -> 告警生成 -> 告警确认 -> 创建工单 -> 工单流转 -> 工单关闭
+```
+
+告警中心是二期最小可用闭环。真实短信、电话或第三方推送不作为本轮硬性目标，接口可以预留 `notification_status` 或扩展服务位置。
+
+### 10.3 扩展图层链路
+
+```text
+降雨/道路/历史易涝点样例数据 -> PostGIS 图层表 -> 图层 API -> 地图开关和图例
+```
+
+扩展图层不阻塞一期核心地图。如果样例数据缺失，前端展示空状态，后端返回空集合和数据源状态。
+
+### 10.4 预测展示链路
+
+```text
+历史水位 + 当前趋势 + 降雨摘要 -> 规则型预测结果 -> 预测 API -> 地图弹窗或预测页面
+```
+
+本轮预测以规则型结果展示为主，不要求训练复杂机器学习模型。预测结果必须带 `model_version` 和生成时间，避免被误解为实时权威预报。
+
+### 10.5 异常与降级规则
+
+- 开放数据接口失败：保留最近一次成功数据，数据状态页显示失败原因。
+- 水位为空：进入历史明细，不参与风险计算，点位风险可显示 `nodata`。
+- 点位无审核坐标：不进入正式地图，但保留在点位校核列表。
+- 高德地理编码失败：记录失败原因，允许人工录入经纬度。
+- PostGIS 未就绪：一期 SQLite 闭环继续可用，二期图层和空间查询暂不可用。
+- 扩展图层缺数据：地图核心点位继续展示，图层面板显示暂无数据。
+- 告警重复触发：已有 active 告警时更新告警最新触发信息，不重复创建。
+
+## 11. 建设路线
+
+### 11.1 一期验收成果
 
 一期验收应包括：
 
@@ -569,7 +924,7 @@ frontend/
 8. 能查询单点历史水位曲线。
 9. 能查看数据源导入状态。
 
-### 10.2 二期扩展
+### 11.2 二期扩展
 
 二期扩展方向：
 
@@ -583,7 +938,22 @@ frontend/
 - 增加处置工单。
 - 增加预测模型结果展示。
 
-## 11. 当前项目适配建议
+### 11.3 Day 2 完成确认清单
+
+Day 2 顶层设计完成后，应确认：
+
+- 系统架构已明确为 FastAPI + Vue + 高德 JS API。
+- 一期 SQLite 闭环和二期 PostGIS 扩展边界清楚。
+- 一期核心表、二期扩展表和关键索引口径已明确。
+- 一期地图、统计、历史、校核、导入状态 API 已明确。
+- 二期调度、阈值、告警、图层、工单、预测、审计 API 已明确。
+- 指挥地图、历史查询、点位校核、数据状态页面已明确。
+- 告警中心、阈值配置、调度状态、审计日志、工单、预测和扩展图层页面已明确。
+- 数据同步、告警处置、扩展图层和预测展示主链路已明确。
+- 无坐标、无水位、接口失败、PostGIS 未就绪和图层缺数据的降级规则已明确。
+- Day 3 可以基于本设计规划 `backend/`、`frontend/`、`data/geo/` 和环境清单。
+
+## 12. 当前项目适配建议
 
 当前项目已有：
 
@@ -602,4 +972,3 @@ frontend/
 3. 新增 FastAPI 地图接口。
 4. 新增 Vue 指挥地图页。
 5. 再把采集脚本纳入后端任务体系。
-
