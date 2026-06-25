@@ -25,6 +25,23 @@ class BackendDay6StatsApiTest(unittest.TestCase):
         self.assertNotIn("risk_levels", payload)
         self.assertNotIn("reservoir_water_levels", payload)
 
+    def test_stats_stations_reports_real_station_type_distribution(self) -> None:
+        response = self.client.get("/api/stats/stations")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 485)
+        self.assertFalse(payload["district_stats_available"])
+        self.assertEqual(payload["district_stats_reason"], "missing_coordinates")
+        self.assertEqual(
+            payload["items"],
+            [
+                {"station_type": "内涝水情站", "station_count": 148},
+                {"station_type": "水库水位站", "station_count": 204},
+                {"station_type": "河道水位站", "station_count": 133},
+            ],
+        )
+
 
 class BackendDay6DataStatusApiTest(unittest.TestCase):
     def setUp(self) -> None:

@@ -69,6 +69,10 @@ def create_api_router(repository: WaterRepository) -> APIRouter:
     def get_stats_overview() -> dict[str, Any]:
         return repository.get_stats_overview()
 
+    @router.get("/stats/stations")
+    def get_station_type_stats() -> dict[str, Any]:
+        return repository.get_station_type_stats()
+
     @router.get("/status/data")
     def get_data_status() -> dict[str, Any]:
         return repository.get_data_status()

@@ -209,6 +209,32 @@ class WaterRepository:
             "has_coordinates": coordinate_status["has_coordinate_columns"],
         }
 
+    def get_station_type_stats(self) -> dict[str, Any]:
+        with connect_readonly(self.settings) as conn:
+            rows = conn.execute(
+                """
+                SELECT station_type, COUNT(*) AS station_count
+                FROM stations
+                GROUP BY station_type
+                ORDER BY
+                    CASE station_type
+                        WHEN '内涝水情站' THEN 1
+                        WHEN '水库水位站' THEN 2
+                        WHEN '河道水位站' THEN 3
+                        ELSE 4
+                    END,
+                    station_type
+                """
+            ).fetchall()
+            total = self._scalar(conn, "SELECT COUNT(*) FROM stations")
+
+        return {
+            "total": total,
+            "district_stats_available": False,
+            "district_stats_reason": "missing_coordinates",
+            "items": [dict(row) for row in rows],
+        }
+
     def get_data_status(self) -> dict[str, Any]:
         summary = self.get_database_summary()
         coordinate_status = self.get_station_coordinate_status()
