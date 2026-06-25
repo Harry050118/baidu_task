@@ -1,11 +1,11 @@
-# Day 6 Statistics And Status API Design
+# Day 6 统计与状态 API 设计
 
-> Date: 2026-06-25  
-> Scope: Day 6 backend statistics and data status APIs
+> 日期：2026-06-29  
+> 交付物：统计与数据状态 API 设计
 
-## Context
+## 1. 背景
 
-Day 5 added the first FastAPI monitoring endpoints:
+Day 5 已完成第一组 FastAPI 监测闭环接口：
 
 - `GET /health`
 - `GET /api/map/points`
@@ -13,34 +13,47 @@ Day 5 added the first FastAPI monitoring endpoints:
 - `GET /api/points/{station_code}/history`
 - `GET /api/data/time-range`
 
-The Day 6 goal is to add read-only statistics and data status APIs for the future frontend data status page and map statistics panel.
+Day 6 目标是在 Day 5 只读查询基础上，补充统计与数据状态 API，为后续前端数据状态页和地图统计面板做准备。
 
-The SQLite mainline database remains `data/local/shenzhen_water.db`. The mainline business tables are `stations` and `flood_water_levels`. `reservoir_water_levels` is only a side-channel quality summary and must not enter map points, station risk logic, or mainline flood statistics.
+当前 SQLite 主线库仍为：
 
-## API Scope
+```text
+data/local/shenzhen_water.db
+```
 
-Day 6 will implement three endpoints:
+主线业务表为：
+
+- `stations`
+- `flood_water_levels`
+
+`reservoir_water_levels` 只作为数据状态和质量摘要旁路，不进入地图点位、积水风险主线统计或后续风险研判。
+
+## 2. API 范围
+
+Day 6 实现 3 个接口：
 
 - `GET /api/stats/overview`
 - `GET /api/status/data`
 - `GET /api/imports/latest`
 
-Day 6 will not implement `GET /api/stats/stations` unless the frontend needs station-type distribution immediately. The current minimum scope keeps the backend focused on confirmed Day 6 needs.
+本轮暂不实现 `GET /api/stats/stations`。如果后续前端马上需要站类分布面板，再单独补充该接口。
 
-## Endpoint Design
+## 3. 接口设计
 
-### `GET /api/stats/overview`
+### 3.1 `GET /api/stats/overview`
 
-Purpose: provide the top-level map statistics panel facts without doing risk assessment.
+用途：为地图统计面板提供全市主线统计事实，不做风险研判。
 
-Data source:
+数据来源：
 
-- `stations`
-- `flood_water_levels`
+```text
+stations
++ flood_water_levels
+```
 
-Response fields:
+返回字段：
 
-| Field | Value |
+| 字段 | 值 |
 |---|---:|
 | `flood_station_count` | `148` |
 | `latest_observed_at` | `2026-06-23 00:47:39` |
@@ -49,51 +62,57 @@ Response fields:
 | `coordinate_status` | `missing_coordinates` |
 | `has_coordinates` | `false` |
 
-This endpoint will not return risk-level counts. Risk assessment belongs to a later day.
+该接口不返回风险等级统计。风险等级、趋势提示和规则说明属于后续规则研判工作。
 
-### `GET /api/status/data`
+### 3.2 `GET /api/status/data`
 
-Purpose: provide the future data status page with data range, coordinate readiness, and quality summary.
+用途：为数据状态页提供数据范围、坐标状态和质量摘要。
 
-Response sections:
+返回结构包含：
 
 - `flood_water_levels`
 - `stations`
 - `reservoir_water_levels`
 
-`flood_water_levels` will include:
+`flood_water_levels` 返回：
 
-- `record_count`
-- `unique_station_codes`
-- `observed_at_min`
-- `observed_at_max`
-- `map_query_ready=true`
-- `real_map_placement_ready=false`
+| 字段 | 说明 |
+|---|---|
+| `record_count` | 积涝点水位唯一记录数 |
+| `unique_station_codes` | 积涝点唯一测站编码数 |
+| `observed_at_min` | 积涝点最早观测时间 |
+| `observed_at_max` | 积涝点最新观测时间 |
+| `map_query_ready` | 是否可用于地图点位查询，当前为 `true` |
+| `real_map_placement_ready` | 是否可用于真实地图落点，当前为 `false` |
 
-`stations` will include:
+`stations` 返回：
 
-- `total`
-- `coordinate_status=missing_coordinates`
-- `has_coordinates=false`
-- `missing_coordinate_stations=485`
+| 字段 | 说明 |
+|---|---|
+| `total` | 测站基础信息总数 |
+| `coordinate_status` | 当前为 `missing_coordinates` |
+| `has_coordinates` | 当前为 `false` |
+| `missing_coordinate_stations` | 缺少坐标的测站数，当前为 `485` |
 
-`reservoir_water_levels` will include only side-channel quality fields:
+`reservoir_water_levels` 只返回旁路质量摘要：
 
-- `quality_role=status_summary_only`
-- `record_count`
-- `unique_station_codes`
-- `null_water_level_rows`
-- `missing_station_codes`
+| 字段 | 说明 |
+|---|---|
+| `quality_role` | 固定为 `status_summary_only` |
+| `record_count` | 水库水位记录数 |
+| `unique_station_codes` | 水库唯一测站编码数 |
+| `null_water_level_rows` | 水库空水位记录数 |
+| `missing_station_codes` | 水库未匹配测站基础信息的编码数 |
 
-This endpoint must make clear that data can support flood station queries, but cannot support accurate real map placement because station coordinates are missing.
+该接口需要明确表达：当前积涝点数据可以支撑点位查询，但由于 `stations` 没有经纬度，不能支撑准确真实地图落点。
 
-### `GET /api/imports/latest`
+### 3.3 `GET /api/imports/latest`
 
-Purpose: expose the latest import batch summary from real `source_imports` records.
+用途：基于 `source_imports` 返回最近导入批次摘要。
 
-Confirmed table schema:
+已确认 `source_imports` 表结构：
 
-| Column | Type |
+| 字段 | 类型 |
 |---|---|
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` |
 | `source_file` | `TEXT NOT NULL` |
@@ -101,55 +120,71 @@ Confirmed table schema:
 | `imported_at` | `TEXT NOT NULL` |
 | `row_count` | `INTEGER NOT NULL` |
 
-The current database has 13 import rows, all with `imported_at=2026-06-23T06:43:59+00:00`. Because the table has no status or error columns, the API must not invent success, failure, or error details.
+当前数据库有 13 条导入记录，`imported_at` 均为：
 
-Response fields:
+```text
+2026-06-23T06:43:59+00:00
+```
 
-- `latest_imported_at`
-- `import_count`
-- `total_row_count`
-- `items`
+由于该表没有状态、错误信息或失败原因字段，Day 6 接口不编造导入成功、失败或错误详情。
 
-`items` will contain the real `id`, `source_file`, `source_format`, `imported_at`, and `row_count` fields for rows in the latest import timestamp, ordered by `id`.
+返回字段：
 
-## Implementation Boundaries
+| 字段 | 说明 |
+|---|---|
+| `latest_imported_at` | 最近导入时间 |
+| `import_count` | 最近导入时间下的记录数 |
+| `total_row_count` | 最近导入时间下的 `row_count` 合计 |
+| `items` | 最近导入时间下的真实导入记录 |
 
-Day 6 will:
+`items` 按 `id` 升序返回真实字段：
 
-- Keep API code in `backend/app/api/routes.py`.
-- Add repository methods to `backend/app/repositories/water_repository.py`.
-- Keep database access read-only through the existing `connect_readonly` helper.
-- Reuse the existing coordinate status logic where possible.
-- Add a focused `tests/test_backend_day6.py`.
+- `id`
+- `source_file`
+- `source_format`
+- `imported_at`
+- `row_count`
 
-Day 6 will not:
+## 4. 实现边界
 
-- Modify `.env`.
-- Print or expose `APP_KEY` or `AMAP_WEB_SERVICE_KEY`.
-- Re-run full data downloads or import archives.
-- Batch-fill coordinates.
-- Invent coordinates.
-- Add risk assessment or model prediction.
-- Treat reservoir water levels as flood risk mainline data.
-- Preserve unrelated `docs/data_quality_report.md` refresh diffs if any script accidentally updates it.
-- Add the untracked Day 4 document to Day 6 work.
+Day 6 会做：
 
-## Testing
+- 继续把 API 路由放在 `backend/app/api/routes.py`。
+- 在 `backend/app/repositories/water_repository.py` 增加只读查询方法。
+- 继续通过 `connect_readonly` 访问 SQLite。
+- 尽量复用现有坐标状态查询口径。
+- 新增 `tests/test_backend_day6.py`。
 
-Tests will cover:
+Day 6 不做：
 
-- The FastAPI app still starts and `/health` remains available.
-- `/api/stats/overview` returns the confirmed Day 3 and Day 5 facts.
-- `/api/status/data` reports missing coordinates and `real_map_placement_ready=false`.
-- `reservoir_water_levels` appears only as `status_summary_only` quality data.
-- `/api/imports/latest` returns real records from `source_imports`, with 13 latest import rows and the real total row count.
-- Full `unittest` discovery still passes.
+- 不修改 `.env`。
+- 不打印或暴露 `APP_KEY`、`AMAP_WEB_SERVICE_KEY`。
+- 不重跑全量下载或导入归档。
+- 不批量补坐标。
+- 不编造坐标。
+- 不做风险研判。
+- 不做模型预测。
+- 不把水库水位纳入积水风险主线。
+- 不保留无关的 `docs/data_quality_report.md` 刷新差异。
+- 不把未跟踪 Day 4 文档纳入 Day 6 工作。
 
-## Acceptance Criteria
+## 5. 测试设计
 
-Day 6 is complete when:
+新增 Day 6 测试，覆盖：
 
-- The three endpoints return stable JSON matching the design above.
-- The implementation uses only read-only SQLite queries.
-- Tests pass for Day 6 and the full existing suite.
-- The repository worktree does not include unrelated Day 4 or data quality report changes.
+- FastAPI 服务仍可启动，`/health` 未回退。
+- `/api/stats/overview` 返回 Day 3 和 Day 5 已确认事实。
+- `/api/status/data` 明确坐标缺失，且 `real_map_placement_ready=false`。
+- `reservoir_water_levels` 只以 `status_summary_only` 质量摘要形式出现。
+- `/api/imports/latest` 返回 `source_imports` 中的真实记录。
+- 最近导入批次记录数为 `13`，行数合计为真实数据库结果。
+- 全量 `unittest` 通过。
+
+## 6. 验收标准
+
+Day 6 完成标准：
+
+- 3 个接口返回稳定 JSON，字段与本设计一致。
+- 所有数据库访问均为只读查询。
+- Day 6 测试和既有全量测试通过。
+- 工作树不包含无关 Day 4 文档或数据质量报告刷新差异。
