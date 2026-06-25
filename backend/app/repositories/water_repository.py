@@ -195,6 +195,98 @@ class WaterRepository:
             },
         }
 
+    def get_stats_overview(self) -> dict[str, Any]:
+        summary = self.get_database_summary()
+        coordinate_status = self.get_station_coordinate_status()
+        return {
+            "flood_station_count": summary["flood_water_levels"][
+                "unique_station_codes"
+            ],
+            "latest_observed_at": summary["flood_water_levels"]["observed_at_max"],
+            "flood_record_count": summary["flood_water_levels"]["rows"],
+            "stations_total": summary["stations"]["rows"],
+            "coordinate_status": coordinate_status["status"],
+            "has_coordinates": coordinate_status["has_coordinate_columns"],
+        }
+
+    def get_data_status(self) -> dict[str, Any]:
+        summary = self.get_database_summary()
+        coordinate_status = self.get_station_coordinate_status()
+        latest_observed_at = summary["flood_water_levels"]["observed_at_max"]
+        return {
+            "flood_water_levels": {
+                "record_count": summary["flood_water_levels"]["rows"],
+                "unique_station_codes": summary["flood_water_levels"][
+                    "unique_station_codes"
+                ],
+                "observed_at_min": summary["flood_water_levels"]["observed_at_min"],
+                "observed_at_max": latest_observed_at,
+                "map_query_ready": True,
+                "real_map_placement_ready": False,
+            },
+            "stations": {
+                "total": coordinate_status["total_stations"],
+                "coordinate_status": coordinate_status["status"],
+                "has_coordinates": coordinate_status["has_coordinate_columns"],
+                "missing_coordinate_stations": coordinate_status[
+                    "missing_coordinate_stations"
+                ],
+            },
+            "reservoir_water_levels": {
+                "quality_role": "status_summary_only",
+                "record_count": summary["reservoir_water_levels"]["rows"],
+                "unique_station_codes": summary["reservoir_water_levels"][
+                    "unique_station_codes"
+                ],
+                "null_water_level_rows": summary["reservoir_water_levels"][
+                    "null_water_level_rows"
+                ],
+                "missing_station_codes": summary["reservoir_water_levels"][
+                    "missing_station_codes"
+                ],
+            },
+            "data_freshness": {
+                "latest_observed_at": latest_observed_at,
+                "status": "historical_snapshot",
+                "message": (
+                    "current local database is usable for API validation, "
+                    "not live monitoring"
+                ),
+            },
+        }
+
+    def get_latest_import_batch(self) -> dict[str, Any]:
+        with connect_readonly(self.settings) as conn:
+            latest_imported_at = self._scalar(
+                conn,
+                "SELECT MAX(imported_at) FROM source_imports",
+            )
+            if latest_imported_at is None:
+                return {
+                    "latest_imported_at": None,
+                    "import_count": 0,
+                    "total_row_count": 0,
+                    "items": [],
+                }
+
+            rows = conn.execute(
+                """
+                SELECT id, source_file, source_format, imported_at, row_count
+                FROM source_imports
+                WHERE imported_at = ?
+                ORDER BY id
+                """,
+                (latest_imported_at,),
+            ).fetchall()
+
+        items = [dict(row) for row in rows]
+        return {
+            "latest_imported_at": latest_imported_at,
+            "import_count": len(items),
+            "total_row_count": sum(item["row_count"] for item in items),
+            "items": items,
+        }
+
     def get_station_coordinate_status(self) -> dict[str, Any]:
         with connect_readonly(self.settings) as conn:
             columns = {

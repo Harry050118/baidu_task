@@ -73,6 +73,7 @@ stations
 - `flood_water_levels`
 - `stations`
 - `reservoir_water_levels`
+- `data_freshness`
 
 `flood_water_levels` 返回：
 
@@ -104,7 +105,15 @@ stations
 | `null_water_level_rows` | 水库空水位记录数 |
 | `missing_station_codes` | 水库未匹配测站基础信息的编码数 |
 
-该接口需要明确表达：当前积涝点数据可以支撑点位查询，但由于 `stations` 没有经纬度，不能支撑准确真实地图落点。
+`data_freshness` 返回：
+
+| 字段 | 说明 |
+|---|---|
+| `latest_observed_at` | 当前本地库积涝点最新观测时间 |
+| `status` | 当前为 `historical_snapshot` |
+| `message` | 说明当前本地库可用于 API 验证，不代表实时在线监测 |
+
+该接口需要明确表达：当前积涝点数据可以支撑点位查询，但由于 `stations` 没有经纬度，不能支撑准确真实地图落点；同时当前本地库是历史快照，不应被误解为实时在线监测数据。
 
 ### 3.3 `GET /api/imports/latest`
 
@@ -175,6 +184,7 @@ Day 6 不做：
 - FastAPI 服务仍可启动，`/health` 未回退。
 - `/api/stats/overview` 返回 Day 3 和 Day 5 已确认事实。
 - `/api/status/data` 明确坐标缺失，且 `real_map_placement_ready=false`。
+- `/api/status/data` 返回 `data_freshness.status=historical_snapshot`。
 - `reservoir_water_levels` 只以 `status_summary_only` 质量摘要形式出现。
 - `/api/imports/latest` 返回 `source_imports` 中的真实记录。
 - 最近导入批次记录数为 `13`，行数合计为真实数据库结果。

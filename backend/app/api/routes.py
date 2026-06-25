@@ -65,6 +65,18 @@ def create_api_router(repository: WaterRepository) -> APIRouter:
     def get_data_time_range() -> dict[str, dict[str, Any]]:
         return repository.get_data_time_ranges()
 
+    @router.get("/stats/overview")
+    def get_stats_overview() -> dict[str, Any]:
+        return repository.get_stats_overview()
+
+    @router.get("/status/data")
+    def get_data_status() -> dict[str, Any]:
+        return repository.get_data_status()
+
+    @router.get("/imports/latest")
+    def get_latest_import_batch() -> dict[str, Any]:
+        return repository.get_latest_import_batch()
+
     return router
 
 
