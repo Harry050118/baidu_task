@@ -130,6 +130,37 @@ class WaterRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_flood_station(self, station_code: str) -> dict[str, Any] | None:
+        with connect_readonly(self.settings) as conn:
+            row = conn.execute(
+                """
+                SELECT s.station_code, s.station_name, s.station_type
+                FROM stations AS s
+                WHERE s.station_code = ?
+                    AND EXISTS (
+                        SELECT 1
+                        FROM flood_water_levels AS f
+                        WHERE f.station_code = s.station_code
+                    )
+                """,
+                (station_code,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def get_latest_flood_water_level(self, station_code: str) -> dict[str, Any] | None:
+        with connect_readonly(self.settings) as conn:
+            row = conn.execute(
+                """
+                SELECT station_code, observed_at, water_level_m, raw_water_level
+                FROM flood_water_levels
+                WHERE station_code = ?
+                ORDER BY observed_at DESC, id DESC
+                LIMIT 1
+                """,
+                (station_code,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def get_flood_water_level_history(
         self,
         station_code: str,
