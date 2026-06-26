@@ -93,6 +93,7 @@ class BackendDay4HealthCheckTest(unittest.TestCase):
             payload["database"]["tables"],
             [
                 "flood_water_levels",
+                "location_candidates",
                 "reservoir_water_levels",
                 "source_imports",
                 "stations",

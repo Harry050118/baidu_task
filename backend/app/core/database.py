@@ -24,3 +24,21 @@ def connect_readonly(settings: Settings) -> Iterator[sqlite3.Connection]:
         yield conn
     finally:
         conn.close()
+
+
+@contextmanager
+def connect_write(settings: Settings) -> Iterator[sqlite3.Connection]:
+    database_path = settings.database_path
+    if not database_path.exists():
+        raise FileNotFoundError(f"Database not found: {database_path}")
+
+    conn = sqlite3.connect(database_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

@@ -29,6 +29,7 @@ class Settings:
     database_url: str = DEFAULT_DATABASE_URL
     app_env: str = "local"
     project_root: Path = PROJECT_ROOT
+    amap_web_service_key: str = ""
 
     @classmethod
     def from_environment(cls, env_file: Path | None = None) -> "Settings":
@@ -39,6 +40,10 @@ class Settings:
                 env_values.get("DATABASE_URL", DEFAULT_DATABASE_URL),
             ),
             app_env=os.environ.get("APP_ENV", env_values.get("APP_ENV", "local")),
+            amap_web_service_key=os.environ.get(
+                "AMAP_WEB_SERVICE_KEY",
+                env_values.get("AMAP_WEB_SERVICE_KEY", ""),
+            ),
         )
 
     @property

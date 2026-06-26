@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any
 
 from backend.app.core.config import Settings
-from backend.app.core.database import connect_readonly
+from backend.app.core.database import connect_readonly, connect_write
 
 
 class WaterRepository:
@@ -13,6 +14,21 @@ class WaterRepository:
 
     def _scalar(self, conn: sqlite3.Connection, sql: str) -> Any:
         return conn.execute(sql).fetchone()[0]
+
+    def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table'
+                AND name = ?
+            """,
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
+    def _utc_now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     def get_table_names(self) -> list[str]:
         with connect_readonly(self.settings) as conn:
@@ -99,6 +115,62 @@ class WaterRepository:
 
     def get_latest_flood_water_levels(self, limit: int = 148) -> list[dict[str, Any]]:
         with connect_readonly(self.settings) as conn:
+            if self._table_exists(conn, "location_candidates"):
+                rows = conn.execute(
+                    """
+                    WITH ranked_levels AS (
+                        SELECT
+                            f.station_code,
+                            f.observed_at,
+                            f.water_level_m,
+                            f.raw_water_level,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY f.station_code
+                                ORDER BY f.observed_at DESC, f.id DESC
+                            ) AS row_number
+                        FROM flood_water_levels AS f
+                    ),
+                    approved_locations AS (
+                        SELECT
+                            lc.station_code,
+                            lc.longitude,
+                            lc.latitude,
+                            lc.coord_source,
+                            lc.coord_quality,
+                            lc.review_status,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY lc.station_code
+                                ORDER BY lc.reviewed_at DESC, lc.updated_at DESC, lc.id DESC
+                            ) AS row_number
+                        FROM location_candidates AS lc
+                        WHERE lc.review_status = 'approved'
+                    )
+                    SELECT
+                        ranked_levels.station_code,
+                        s.station_name,
+                        s.station_type,
+                        ranked_levels.observed_at,
+                        ranked_levels.water_level_m,
+                        ranked_levels.raw_water_level,
+                        approved_locations.longitude,
+                        approved_locations.latitude,
+                        approved_locations.coord_source,
+                        approved_locations.coord_quality,
+                        approved_locations.review_status
+                    FROM ranked_levels
+                    INNER JOIN stations AS s
+                        ON s.station_code = ranked_levels.station_code
+                    LEFT JOIN approved_locations
+                        ON approved_locations.station_code = ranked_levels.station_code
+                        AND approved_locations.row_number = 1
+                    WHERE ranked_levels.row_number = 1
+                    ORDER BY ranked_levels.observed_at DESC, ranked_levels.station_code
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+                return [dict(row) for row in rows]
+
             rows = conn.execute(
                 """
                 WITH ranked AS (
@@ -129,6 +201,18 @@ class WaterRepository:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_station(self, station_code: str) -> dict[str, Any] | None:
+        with connect_readonly(self.settings) as conn:
+            row = conn.execute(
+                """
+                SELECT station_code, station_name, station_type
+                FROM stations
+                WHERE station_code = ?
+                """,
+                (station_code,),
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def get_flood_station(self, station_code: str) -> dict[str, Any] | None:
         with connect_readonly(self.settings) as conn:
@@ -330,3 +414,189 @@ class WaterRepository:
             "missing_coordinate_stations": 0 if has_coordinate_columns else total_stations,
             "required_action": "coordinate_source_and_manual_review_required",
         }
+
+    def get_location_status(self) -> dict[str, Any]:
+        coordinate_status = self.get_station_coordinate_status()
+        with connect_readonly(self.settings) as conn:
+            if not self._table_exists(conn, "location_candidates"):
+                candidate_count = 0
+                approved_count = 0
+                rejected_count = 0
+            else:
+                candidate_count = self._scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM location_candidates",
+                )
+                approved_count = self._scalar(
+                    conn,
+                    """
+                    SELECT COUNT(*)
+                    FROM location_candidates
+                    WHERE review_status = 'approved'
+                    """,
+                )
+                rejected_count = self._scalar(
+                    conn,
+                    """
+                    SELECT COUNT(*)
+                    FROM location_candidates
+                    WHERE review_status = 'rejected'
+                    """,
+                )
+
+        return {
+            "total_stations": coordinate_status["total_stations"],
+            "has_coordinate_columns": coordinate_status["has_coordinate_columns"],
+            "coordinate_status": coordinate_status["status"],
+            "candidate_count": candidate_count,
+            "approved_count": approved_count,
+            "rejected_count": rejected_count,
+            "required_action": coordinate_status["required_action"],
+        }
+
+    def create_location_candidate(
+        self,
+        *,
+        station_code: str,
+        longitude: float,
+        latitude: float,
+        formatted_address: str,
+        amap_level: str | None,
+        amap_adcode: str | None,
+        coord_source: str = "amap",
+        coord_quality: str = "candidate",
+        review_status: str = "pending",
+    ) -> dict[str, Any]:
+        now = self._utc_now()
+        with connect_write(self.settings) as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO location_candidates (
+                    station_code,
+                    longitude,
+                    latitude,
+                    formatted_address,
+                    amap_level,
+                    amap_adcode,
+                    coord_source,
+                    coord_quality,
+                    review_status,
+                    reviewed_at,
+                    review_note,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+                """,
+                (
+                    station_code,
+                    longitude,
+                    latitude,
+                    formatted_address,
+                    amap_level,
+                    amap_adcode,
+                    coord_source,
+                    coord_quality,
+                    review_status,
+                    now,
+                    now,
+                ),
+            )
+            candidate_id = cursor.lastrowid
+
+        candidate = self.get_location_candidate(candidate_id)
+        if candidate is None:
+            raise RuntimeError("location candidate was not saved")
+        return candidate
+
+    def get_location_candidate(self, candidate_id: int) -> dict[str, Any] | None:
+        with connect_readonly(self.settings) as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    id,
+                    station_code,
+                    longitude,
+                    latitude,
+                    formatted_address,
+                    amap_level,
+                    amap_adcode,
+                    coord_source,
+                    coord_quality,
+                    review_status,
+                    reviewed_at,
+                    review_note,
+                    created_at,
+                    updated_at
+                FROM location_candidates
+                WHERE id = ?
+                """,
+                (candidate_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def get_location_candidates(self, station_code: str) -> list[dict[str, Any]]:
+        with connect_readonly(self.settings) as conn:
+            if not self._table_exists(conn, "location_candidates"):
+                return []
+            rows = conn.execute(
+                """
+                SELECT
+                    id,
+                    station_code,
+                    longitude,
+                    latitude,
+                    formatted_address,
+                    amap_level,
+                    amap_adcode,
+                    coord_source,
+                    coord_quality,
+                    review_status,
+                    reviewed_at,
+                    review_note,
+                    created_at,
+                    updated_at
+                FROM location_candidates
+                WHERE station_code = ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (station_code,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def review_location_candidate(
+        self,
+        *,
+        station_code: str,
+        candidate_id: int,
+        review_status: str,
+        review_note: str | None = None,
+    ) -> dict[str, Any] | None:
+        coord_quality = "verified" if review_status == "approved" else "rejected"
+        now = self._utc_now()
+        with connect_write(self.settings) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE location_candidates
+                SET
+                    review_status = ?,
+                    coord_quality = ?,
+                    reviewed_at = ?,
+                    review_note = ?,
+                    updated_at = ?
+                WHERE id = ?
+                    AND station_code = ?
+                """,
+                (
+                    review_status,
+                    coord_quality,
+                    now,
+                    review_note,
+                    now,
+                    candidate_id,
+                    station_code,
+                ),
+            )
+            if cursor.rowcount == 0:
+                return None
+
+        return self.get_location_candidate(candidate_id)

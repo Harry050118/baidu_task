@@ -11,7 +11,9 @@ class BackendDay5MapApiTest(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
 
-    def test_map_points_return_all_flood_stations_without_coordinates(self) -> None:
+    def test_map_points_return_flood_stations_and_only_approved_coordinates(
+        self,
+    ) -> None:
         response = self.client.get("/api/map/points")
 
         self.assertEqual(response.status_code, 200)
@@ -20,16 +22,25 @@ class BackendDay5MapApiTest(unittest.TestCase):
 
         station_codes = {point["station_code"] for point in points}
         self.assertEqual(len(station_codes), 148)
+        approved_coordinate_points = []
         for point in points:
             self.assertEqual(point["station_type"], "内涝水情站")
             self.assertIn("station_name", point)
             self.assertIn("latest_observed_at", point)
             self.assertIn("latest_water_level_m", point)
             self.assertIn("raw_water_level", point)
-            self.assertFalse(point["has_coordinates"])
-            self.assertEqual(point["coordinate_status"], "missing_coordinates")
-            self.assertNotIn("longitude", point)
-            self.assertNotIn("latitude", point)
+            if point["has_coordinates"]:
+                approved_coordinate_points.append(point)
+                self.assertEqual(point["coordinate_status"], "approved")
+                self.assertEqual(point["review_status"], "approved")
+                self.assertIn("longitude", point)
+                self.assertIn("latitude", point)
+            else:
+                self.assertEqual(point["coordinate_status"], "missing_coordinates")
+                self.assertNotIn("longitude", point)
+                self.assertNotIn("latitude", point)
+
+        self.assertGreaterEqual(len(approved_coordinate_points), 1)
 
     def test_data_time_range_reports_day3_flood_facts(self) -> None:
         response = self.client.get("/api/data/time-range")

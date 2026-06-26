@@ -1,19 +1,41 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from backend.app.repositories.water_repository import WaterRepository
+from backend.app.services.coordinates.amap_geocoder import (
+    AmapGeocoder,
+    AmapGeocoderError,
+    MissingAmapKeyError,
+)
 
 
-def create_api_router(repository: WaterRepository) -> APIRouter:
+class GeocodeCandidateRequest(BaseModel):
+    station_code: str
+    address: str | None = None
+
+
+class ReviewLocationCandidateRequest(BaseModel):
+    candidate_id: int
+    review_status: Literal["approved", "rejected"]
+    review_note: str | None = None
+
+
+def create_api_router(
+    repository: WaterRepository,
+    geocoder: Any | None = None,
+) -> APIRouter:
     router = APIRouter()
+    geocoder = geocoder or AmapGeocoder(repository.settings)
 
     @router.get("/map/points")
     def get_map_points() -> dict[str, list[dict[str, Any]]]:
-        points = [
-            {
+        points = []
+        for row in repository.get_latest_flood_water_levels():
+            point = {
                 "station_code": row["station_code"],
                 "station_name": row["station_name"],
                 "station_type": row["station_type"],
@@ -23,8 +45,19 @@ def create_api_router(repository: WaterRepository) -> APIRouter:
                 "has_coordinates": False,
                 "coordinate_status": "missing_coordinates",
             }
-            for row in repository.get_latest_flood_water_levels()
-        ]
+            if row.get("review_status") == "approved":
+                point.update(
+                    {
+                        "has_coordinates": True,
+                        "coordinate_status": "approved",
+                        "longitude": row["longitude"],
+                        "latitude": row["latitude"],
+                        "coord_source": row["coord_source"],
+                        "coord_quality": row["coord_quality"],
+                        "review_status": row["review_status"],
+                    }
+                )
+            points.append(point)
         return {"points": points}
 
     @router.get("/points/{station_code}")
@@ -81,6 +114,80 @@ def create_api_router(repository: WaterRepository) -> APIRouter:
     def get_latest_import_batch() -> dict[str, Any]:
         return repository.get_latest_import_batch()
 
+    @router.get("/locations/status")
+    def get_locations_status() -> dict[str, Any]:
+        return repository.get_location_status()
+
+    @router.post("/locations/geocode-candidates")
+    def create_geocode_candidate(
+        request: GeocodeCandidateRequest,
+    ) -> dict[str, Any]:
+        station = repository.get_station(request.station_code)
+        if station is None:
+            raise HTTPException(status_code=404, detail="station not found")
+
+        address = request.address or f"深圳市{station['station_name']}"
+        try:
+            amap_payload = geocoder.geocode(address=address, city="深圳")
+        except MissingAmapKeyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except AmapGeocoderError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        geocodes = amap_payload.get("geocodes") or []
+        if not geocodes:
+            raise HTTPException(status_code=404, detail="geocode candidate not found")
+
+        first = geocodes[0]
+        longitude, latitude = _parse_amap_location(first["location"])
+        candidate = repository.create_location_candidate(
+            station_code=request.station_code,
+            longitude=longitude,
+            latitude=latitude,
+            formatted_address=first.get("formatted_address") or address,
+            amap_level=first.get("level"),
+            amap_adcode=first.get("adcode"),
+        )
+        return {
+            "station": station,
+            "candidate": candidate,
+            "amap_status": {
+                "status": amap_payload.get("status"),
+                "info": amap_payload.get("info"),
+                "infocode": amap_payload.get("infocode"),
+                "count": amap_payload.get("count"),
+            },
+        }
+
+    @router.get("/locations/{station_code}/candidates")
+    def get_location_candidates(station_code: str) -> dict[str, Any]:
+        station = repository.get_station(station_code)
+        if station is None:
+            raise HTTPException(status_code=404, detail="station not found")
+        return {
+            "station": station,
+            "items": repository.get_location_candidates(station_code),
+        }
+
+    @router.post("/locations/{station_code}/review")
+    def review_location_candidate(
+        station_code: str,
+        request: ReviewLocationCandidateRequest,
+    ) -> dict[str, Any]:
+        station = repository.get_station(station_code)
+        if station is None:
+            raise HTTPException(status_code=404, detail="station not found")
+
+        candidate = repository.review_location_candidate(
+            station_code=station_code,
+            candidate_id=request.candidate_id,
+            review_status=request.review_status,
+            review_note=request.review_note,
+        )
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="location candidate not found")
+        return {"station": station, "candidate": candidate}
+
     return router
 
 
@@ -92,3 +199,8 @@ def _get_flood_station_or_404(
     if station is None:
         raise HTTPException(status_code=404, detail="flood station not found")
     return station
+
+
+def _parse_amap_location(location: str) -> tuple[float, float]:
+    longitude_text, latitude_text = location.split(",", 1)
+    return float(longitude_text), float(latitude_text)
