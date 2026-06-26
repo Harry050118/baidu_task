@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.app.repositories.water_repository import WaterRepository
+from backend.app.services.assessments import build_assessment, utc_now_iso
 from backend.app.services.coordinates.amap_geocoder import (
     AmapGeocoder,
     AmapGeocoderError,
@@ -97,6 +98,29 @@ def create_api_router(
     @router.get("/data/time-range")
     def get_data_time_range() -> dict[str, dict[str, Any]]:
         return repository.get_data_time_ranges()
+
+    @router.get("/assessments")
+    def get_assessments() -> dict[str, Any]:
+        generated_at = utc_now_iso()
+        items = []
+        for station in repository.get_flood_stations():
+            recent_levels = repository.get_recent_flood_water_levels(
+                station["station_code"],
+            )
+            items.append(
+                build_assessment(
+                    station=station,
+                    recent_levels=recent_levels,
+                    generated_at=generated_at,
+                )
+            )
+        return {"items": items}
+
+    @router.get("/points/{station_code}/assessment")
+    def get_point_assessment(station_code: str) -> dict[str, Any]:
+        station = _get_flood_station_or_404(repository, station_code)
+        recent_levels = repository.get_recent_flood_water_levels(station_code)
+        return build_assessment(station=station, recent_levels=recent_levels)
 
     @router.get("/stats/overview")
     def get_stats_overview() -> dict[str, Any]:
