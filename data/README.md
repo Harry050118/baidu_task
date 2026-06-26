@@ -8,8 +8,14 @@
 
 ```text
 data/
+  features/
+    .gitkeep
+  geo/
+    .gitkeep
   local/
     shenzhen_water.db
+  models/
+    .gitkeep
   raw_samples/
     sample_station_page.html
     sample_water_level_page.html
@@ -22,6 +28,12 @@ data/local/shenzhen_water.db
 ```
 
 它就是本项目的 SQLite 数据库文件。SQLite 的特点是：整个数据库就是一个普通文件，不需要单独启动数据库服务，也不需要账号、端口、密码。
+
+其他目录用于后续阶段：
+
+- `data/geo/`：行政区、道路、历史易涝点、政府标准坐标等地理数据。
+- `data/features/`：训练样本、特征表、样本切分记录。
+- `data/models/`：模型文件、评估报告和版本说明。
 
 ## 2. SQLite 是什么
 
@@ -185,6 +197,9 @@ download/市水务局水库水位表/2026-01/市水务局水库水位表_1952552
 - SQLite 表里是 4,101,063 行。
 - 差异来自 3 月文件里一个完全重复的 `水位id=599890334`，数据库用主键去重后只保留 1 条。
 - 水库水位中有 40,982 条空水位，数据库里 `water_level_m` 写成 `NULL`，原始文本仍保存在 `raw_water_level`。
+- 积涝点水位时间范围是 `2025-12-31 23:50:23` 至 `2026-06-23 00:47:39`，148 个测站编码全部匹配 `stations`。
+- 水库水位时间范围是 `2025-12-31 23:27:04` 至 `2026-06-23 00:35:00`，178 个测站编码中 169 个匹配 `stations`，9 个暂未匹配。
+- `stations` 当前没有经度、纬度或坐标系字段。坐标补全必须使用有来源、质量状态和审核状态的坐标记录，不能编造测站坐标。
 
 ## 8. 如何检查数据库是否正常
 
