@@ -1,0 +1,69 @@
+:root {
+  --bg-base:        #0D1117;
+  --bg-surface:     #161B22;
+  --bg-raised:      #1F2937;
+  --border:         #30363D;
+  --text-primary:   #E6EDF3;
+  --text-secondary: #8B949E;
+  --text-muted:     #484F58;
+
+  --risk-danger:    #DA3633;
+  --risk-warning:   #D29922;
+  --risk-attention: #9E6A03;
+  --risk-normal:    #238636;
+  --risk-no-data:   #484F58;
+
+  --trend-rising:      #F85149;
+  --trend-falling:     #3FB950;
+  --trend-stable:      #8B949E;
+  --trend-fluctuating: #E3B341;
+
+  --chart-line:     #58A6FF;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+button:hover {
+  background: #2d3748;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--chart-line);
+  text-decoration: none;
+}
