@@ -26,7 +26,7 @@
           <span class="sname">{{ p.station_name }}</span>
           <CoordStatusTag :status="p.coordinate_status" />
         </div>
-        <div v-if="missingPoints.length === 0" class="empty-list">暂无待校核点位</div>
+        <EmptyState v-if="missingPoints.length === 0" message="暂无待校核点位" />
       </aside>
       <main class="review-main">
         <LocationReviewPanel
@@ -43,6 +43,7 @@
 import { ref, computed, onMounted } from 'vue'
 import SkeletonBlock from '../components/SkeletonBlock.vue'
 import ErrorState from '../components/ErrorState.vue'
+import EmptyState from '../components/EmptyState.vue'
 import CoordStatusTag from '../components/CoordStatusTag.vue'
 import LocationReviewPanel from '../components/LocationReviewPanel.vue'
 import { getLocationsStatus } from '../api/locations'
@@ -73,8 +74,11 @@ async function loadAll() {
     locStatus.value = s
     locationsStore.status = s
     allPoints.value = pts.points
-    if (!selectedCode.value && missingPoints.value.length > 0) {
+    const selectedStillPending = missingPoints.value.some((point) => point.station_code === selectedCode.value)
+    if (!selectedStillPending && missingPoints.value.length > 0) {
       selectedCode.value = missingPoints.value[0].station_code
+    } else if (!selectedStillPending) {
+      selectedCode.value = null
     }
   } catch (e: unknown) {
     error.value = (e as { userMessage?: string })?.userMessage ?? '加载坐标状态失败'
@@ -104,6 +108,5 @@ onMounted(loadAll)
 .station-item:hover { background: var(--bg-raised); }
 .station-item.active { background: var(--bg-raised); border-left: 2px solid var(--chart-line); }
 .sname { flex: 1; margin-right: 8px; }
-.empty-list { padding: 16px; color: var(--text-muted); font-size: 13px; }
 .review-main { flex: 1; overflow-y: auto; }
 </style>

@@ -303,6 +303,29 @@ class BackendDay7LocationApiTest(unittest.TestCase):
         self.assertEqual(approved_point["coord_quality"], "verified")
         self.assertEqual(approved_point["review_status"], "approved")
 
+    def test_approved_candidate_enters_point_detail_coordinates(self) -> None:
+        candidate = self.client.post(
+            "/api/locations/geocode-candidates",
+            json={"station_code": "9281192008"},
+        ).json()["candidate"]
+
+        self.client.post(
+            "/api/locations/9281192008/review",
+            json={"candidate_id": candidate["id"], "review_status": "approved"},
+        )
+
+        response = self.client.get("/api/points/9281192008")
+
+        self.assertEqual(response.status_code, 200)
+        coordinates = response.json()["coordinates"]
+        self.assertTrue(coordinates["has_coordinates"])
+        self.assertEqual(coordinates["coordinate_status"], "approved")
+        self.assertEqual(coordinates["longitude"], 114.258123)
+        self.assertEqual(coordinates["latitude"], 22.723456)
+        self.assertEqual(coordinates["coord_source"], "amap")
+        self.assertEqual(coordinates["coord_quality"], "verified")
+        self.assertEqual(coordinates["review_status"], "approved")
+
 
 if __name__ == "__main__":
     unittest.main()

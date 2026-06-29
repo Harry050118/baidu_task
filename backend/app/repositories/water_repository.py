@@ -261,6 +261,29 @@ class WaterRepository:
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def get_approved_location(self, station_code: str) -> dict[str, Any] | None:
+        with connect_readonly(self.settings) as conn:
+            if not self._table_exists(conn, "location_candidates"):
+                return None
+            row = conn.execute(
+                """
+                SELECT
+                    station_code,
+                    longitude,
+                    latitude,
+                    coord_source,
+                    coord_quality,
+                    review_status
+                FROM location_candidates
+                WHERE station_code = ?
+                    AND review_status = 'approved'
+                ORDER BY reviewed_at DESC, updated_at DESC, id DESC
+                LIMIT 1
+                """,
+                (station_code,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def get_recent_flood_water_levels(
         self,
         station_code: str,

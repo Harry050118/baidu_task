@@ -72,13 +72,22 @@ class BackendDay5PointApiTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["station"]["station_code"], "9281192008")
         self.assertEqual(payload["station"]["station_type"], "内涝水情站")
-        self.assertFalse(payload["coordinates"]["has_coordinates"])
-        self.assertEqual(payload["coordinates"]["coordinate_status"], "missing_coordinates")
         self.assertIn("latest_observed_at", payload["latest_water_level"])
         self.assertIn("latest_water_level_m", payload["latest_water_level"])
         self.assertIn("raw_water_level", payload["latest_water_level"])
-        self.assertNotIn("longitude", payload["coordinates"])
-        self.assertNotIn("latitude", payload["coordinates"])
+        self.assertIn("has_coordinates", payload["coordinates"])
+        self.assertIn("coordinate_status", payload["coordinates"])
+        if payload["coordinates"]["has_coordinates"]:
+            self.assertEqual(payload["coordinates"]["coordinate_status"], "approved")
+            self.assertEqual(payload["coordinates"]["review_status"], "approved")
+            self.assertIn("longitude", payload["coordinates"])
+            self.assertIn("latitude", payload["coordinates"])
+            self.assertIn("coord_source", payload["coordinates"])
+            self.assertIn("coord_quality", payload["coordinates"])
+        else:
+            self.assertEqual(payload["coordinates"]["coordinate_status"], "missing_coordinates")
+            self.assertNotIn("longitude", payload["coordinates"])
+            self.assertNotIn("latitude", payload["coordinates"])
 
     def test_history_returns_real_flood_series_in_descending_time_order(self) -> None:
         response = self.client.get("/api/points/9281192008/history?limit=5")

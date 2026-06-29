@@ -3,19 +3,36 @@
     <p class="card__label">积涝点数据范围</p>
     <SkeletonBlock v-if="loading" width="100%" height="60px" />
     <ErrorState v-else-if="error" :message="error" />
-    <template v-else-if="data">
-      <p class="card__row">最早 <span class="mono">{{ data.flood_water_levels.earliest_observed_at ?? '—' }}</span></p>
-      <p class="card__row">最新 <span class="mono">{{ data.flood_water_levels.latest_observed_at ?? '—' }}</span></p>
-      <p class="card__row">总计 <span class="mono">{{ data.flood_water_levels.record_count?.toLocaleString() }}</span> 条</p>
+    <template v-else-if="data || recordCount != null">
+      <p class="card__row">最早 <span class="mono">{{ normalized.earliest ?? '—' }}</span></p>
+      <p class="card__row">最新 <span class="mono">{{ normalized.latest ?? '—' }}</span></p>
+      <p class="card__row">总计 <span class="mono">{{ displayRecordCount }}</span> 条</p>
     </template>
+    <EmptyState v-else message="暂无积涝点数据范围" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import SkeletonBlock from './SkeletonBlock.vue'
 import ErrorState from './ErrorState.vue'
+import EmptyState from './EmptyState.vue'
+import { normalizeObservationWindow } from '../utils/commandMap'
 import type { TimeRangeResponse } from '../types/api'
-defineProps<{ data: TimeRangeResponse | null; loading: boolean; error?: string | null }>()
+const props = defineProps<{
+  data: TimeRangeResponse | null
+  loading: boolean
+  error?: string | null
+  recordCount?: number | null
+}>()
+
+const normalized = computed(() =>
+  normalizeObservationWindow(null, props.data?.flood_water_levels, null),
+)
+const displayRecordCount = computed(() => {
+  const value = normalized.value.recordCount ?? props.recordCount
+  return value != null ? value.toLocaleString() : '—'
+})
 </script>
 
 <style scoped>

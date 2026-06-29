@@ -67,6 +67,22 @@ def create_api_router(
         latest = repository.get_latest_flood_water_level(station_code)
         if latest is None:
             raise HTTPException(status_code=404, detail="flood station not found")
+        approved_location = repository.get_approved_location(station_code)
+
+        coordinates = {
+            "has_coordinates": False,
+            "coordinate_status": "missing_coordinates",
+        }
+        if approved_location is not None:
+            coordinates = {
+                "has_coordinates": True,
+                "coordinate_status": "approved",
+                "longitude": approved_location["longitude"],
+                "latitude": approved_location["latitude"],
+                "coord_source": approved_location["coord_source"],
+                "coord_quality": approved_location["coord_quality"],
+                "review_status": approved_location["review_status"],
+            }
 
         return {
             "station": station,
@@ -75,10 +91,7 @@ def create_api_router(
                 "latest_water_level_m": latest["water_level_m"],
                 "raw_water_level": latest["raw_water_level"],
             },
-            "coordinates": {
-                "has_coordinates": False,
-                "coordinate_status": "missing_coordinates",
-            },
+            "coordinates": coordinates,
         }
 
     @router.get("/points/{station_code}/history")

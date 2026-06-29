@@ -11,18 +11,31 @@
       <div class="drawer__body">
         <p class="drawer__level mono">{{ levelDisplay }}</p>
         <div class="drawer__status">
-          <RiskBadge v-if="assessment" :level="assessment.risk_level" />
-          <TrendIndicator v-if="assessment" :trend="assessment.trend" />
+          <RiskBadge :level="assessment?.risk_level ?? 'no_data'" />
+          <TrendIndicator :trend="assessment?.trend ?? 'no_data'" />
         </div>
         <p class="drawer__time mono">观测时间 {{ point.latest_observed_at ?? '—' }}</p>
         <hr class="divider" />
-        <CoordStatusTag :status="point.coordinate_status" :source="point.coord_source" />
+        <div class="field-list">
+          <div class="field-row">
+            <span>坐标状态</span>
+            <CoordStatusTag :status="point.coordinate_status" :source="point.coord_source" />
+          </div>
+          <div class="field-row">
+            <span>坐标来源</span>
+            <strong>{{ point.coord_source ?? '未提供' }}</strong>
+          </div>
+          <div class="field-row">
+            <span>坐标质量</span>
+            <strong>{{ point.coord_quality ?? '未提供' }}</strong>
+          </div>
+        </div>
         <hr class="divider" />
         <div class="drawer__actions">
           <router-link :to="`/points/${point.station_code}`">
             <button>查看历史曲线</button>
           </router-link>
-          <router-link :to="`/assessments`">
+          <router-link :to="{ path: '/assessments', query: { stationCode: point.station_code } }">
             <button>查看研判</button>
           </router-link>
         </div>
@@ -79,7 +92,17 @@ const levelDisplay = computed(() => {
 .drawer__status { display: flex; gap: 12px; align-items: center; }
 .drawer__time { font-size: 12px; color: var(--text-secondary); }
 .divider { border: none; border-top: 1px solid var(--border); }
-.drawer__actions { display: flex; gap: 8px; }
+.field-list { display: flex; flex-direction: column; gap: 8px; }
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.field-row strong { color: var(--text-primary); font-weight: 500; }
+.drawer__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.2s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }

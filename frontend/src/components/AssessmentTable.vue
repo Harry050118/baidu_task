@@ -16,7 +16,10 @@
         @click="activeTrend = f.value"
       >{{ f.label }}</button>
     </div>
-    <p class="rule-version">规则版本：flood_rule_v1</p>
+    <p class="rule-version">
+      规则版本：flood_rule_v1
+      <span v-if="targetStationCode" class="target-note"> · 定位站点 {{ targetStationCode }}</span>
+    </p>
     <SkeletonBlock v-if="loading" width="100%" height="200px" />
     <ErrorState v-else-if="error" :message="error" />
     <div v-else-if="filtered.length === 0">
@@ -30,7 +33,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in filtered" :key="item.station_code">
+          <tr
+            v-for="item in filtered"
+            :key="item.station_code"
+            :ref="(el) => setRowRef(el, item.station_code)"
+            :class="{ highlighted: shouldHighlightAssessment(item.station_code, normalizedTargetStationCode) }"
+          >
             <td>{{ item.station_name }}</td>
             <td class="mono">{{ item.latest_water_level_m != null ? item.latest_water_level_m.toFixed(2) + ' m' : '—' }}</td>
             <td><RiskBadge :level="item.risk_level" /></td>
@@ -45,18 +53,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { nextTick, ref, computed, watch } from 'vue'
 import RiskBadge from './RiskBadge.vue'
 import TrendIndicator from './TrendIndicator.vue'
 import SkeletonBlock from './SkeletonBlock.vue'
 import ErrorState from './ErrorState.vue'
 import EmptyState from './EmptyState.vue'
+import { getAssessmentTargetIndex, shouldHighlightAssessment } from '../utils/commandMap'
 import type { AssessmentItem, RiskLevel, Trend } from '../types/api'
 
 const props = defineProps<{
   items: AssessmentItem[]
   loading: boolean
   error?: string | null
+  targetStationCode?: string | null
 }>()
 
 type FilterValue = RiskLevel | 'all'
@@ -82,6 +92,8 @@ const TREND_FILTERS: Array<{ value: TrendFilterValue; label: string }> = [
 
 const activeRisk = ref<FilterValue>('all')
 const activeTrend = ref<TrendFilterValue>('all')
+const rowRefs = new Map<string, Element>()
+const normalizedTargetStationCode = computed(() => props.targetStationCode ?? null)
 
 const filtered = computed(() =>
   props.items.filter((i) => {
@@ -90,6 +102,26 @@ const filtered = computed(() =>
     return riskOk && trendOk
   }),
 )
+
+function setRowRef(el: unknown, stationCode: string) {
+  if (el instanceof Element) rowRefs.set(stationCode, el)
+  else rowRefs.delete(stationCode)
+}
+
+watch(
+  () => [props.items, props.targetStationCode, activeRisk.value, activeTrend.value] as const,
+  async () => {
+    if (
+      !normalizedTargetStationCode.value ||
+      getAssessmentTargetIndex(filtered.value, normalizedTargetStationCode.value) < 0
+    ) {
+      return
+    }
+    await nextTick()
+    rowRefs.get(normalizedTargetStationCode.value)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -97,6 +129,7 @@ const filtered = computed(() =>
 .filter-btn { padding: 4px 10px; font-size: 12px; }
 .filter-btn.active { background: var(--chart-line); color: #0D1117; border-color: var(--chart-line); }
 .rule-version { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.target-note { color: var(--chart-line); }
 .table-wrap { overflow-x: auto; }
 .assessment-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .assessment-table th {
@@ -105,6 +138,11 @@ const filtered = computed(() =>
   color: var(--text-secondary); font-weight: 500;
 }
 .assessment-table td { padding: 8px 10px; border-bottom: 1px solid #1F2937; }
+.assessment-table tr.highlighted td {
+  background: rgba(88, 166, 255, 0.12);
+  border-top: 1px solid rgba(88, 166, 255, 0.35);
+  border-bottom-color: rgba(88, 166, 255, 0.35);
+}
 .rule-desc { white-space: normal; line-height: 1.5; }
 .time-col { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 </style>
