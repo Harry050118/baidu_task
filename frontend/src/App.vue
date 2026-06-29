@@ -4,7 +4,10 @@
       <span class="topbar-brand">深圳积水监测</span>
       <span v-if="latestTime" class="topbar-time mono">最新观测: {{ latestTime }}</span>
       <span v-if="isHistoricalSnapshot" class="tag-historical">历史快照</span>
-      <span class="health-dot" :class="healthStatus" :title="healthTitle" aria-label="服务状态"></span>
+      <span class="health-status" :class="healthStatus" :title="healthTitle" aria-label="后端健康状态">
+        <span class="health-dot" aria-hidden="true"></span>
+        后端 {{ healthTitle }}
+      </span>
       <nav class="topbar-nav">
         <router-link to="/data-status">数据状态</router-link>
         <router-link to="/locations">坐标校核</router-link>
@@ -83,15 +86,26 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
+.health-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .health-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.health-dot.ok       { background: #3FB950; }
-.health-dot.error    { background: #DA3633; }
-.health-dot.checking { background: #8B949E; }
+.health-status.ok .health-dot       { background: #3FB950; }
+.health-status.error .health-dot    { background: #DA3633; }
+.health-status.checking .health-dot { background: #8B949E; }
+.health-status.ok { color: #3FB950; }
+.health-status.error { color: #DA3633; }
 
 .topbar-nav {
   margin-left: auto;

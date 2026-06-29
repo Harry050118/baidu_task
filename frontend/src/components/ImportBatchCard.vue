@@ -3,16 +3,21 @@
     <p class="card__label">最近导入批次</p>
     <SkeletonBlock v-if="loading" width="100%" height="60px" />
     <ErrorState v-else-if="error" :message="error" />
-    <template v-else-if="data">
+    <template v-else-if="data && data.latest_imported_at">
       <p class="card__value mono">{{ data.latest_imported_at ?? '—' }}</p>
-      <p class="card__sub">记录 <span class="mono">{{ data.import_count?.toLocaleString() }}</span> &nbsp; 批次数 <span class="mono">{{ data.items.length }}</span></p>
+      <p class="card__sub">
+        导入记录 <span class="mono">{{ data.import_count?.toLocaleString() }}</span>
+        &nbsp; 行数 <span class="mono">{{ data.total_row_count?.toLocaleString() }}</span>
+      </p>
     </template>
+    <EmptyState v-else message="暂无导入批次记录" />
   </div>
 </template>
 
 <script setup lang="ts">
 import SkeletonBlock from './SkeletonBlock.vue'
 import ErrorState from './ErrorState.vue'
+import EmptyState from './EmptyState.vue'
 import type { LatestImportResponse } from '../types/api'
 defineProps<{ data: LatestImportResponse | null; loading: boolean; error?: string | null }>()
 </script>

@@ -45,15 +45,19 @@ export interface PointDetailResponse {
     station_type: string
   }
   latest_water_level: {
-    water_level_m: number | null
-    observed_at: string | null
+    latest_water_level_m?: number | null
+    latest_observed_at?: string | null
+    water_level_m?: number | null
+    observed_at?: string | null
     raw_water_level: string | null
   } | null
   coordinates: {
+    has_coordinates: boolean
     coordinate_status: CoordinateStatus
     longitude?: number
     latitude?: number
     coord_source?: string
+    coord_quality?: string
     review_status?: ReviewStatus
   }
 }
@@ -77,9 +81,11 @@ export interface PointHistoryResponse {
 // GET /api/data/time-range
 export interface TimeRangeResponse {
   flood_water_levels: {
-    earliest_observed_at: string | null
-    latest_observed_at: string | null
-    record_count: number
+    observed_at_min?: string | null
+    observed_at_max?: string | null
+    earliest_observed_at?: string | null
+    latest_observed_at?: string | null
+    record_count?: number
   }
   reservoir_water_levels: {
     quality_role: 'status_summary_only'
@@ -108,16 +114,24 @@ export interface StationsStatsResponse {
 // GET /api/status/data
 export interface DataStatusResponse {
   flood_water_levels: {
-    earliest_observed_at: string | null
-    latest_observed_at: string | null
+    observed_at_min?: string | null
+    observed_at_max?: string | null
+    earliest_observed_at?: string | null
+    latest_observed_at?: string | null
     record_count: number
-    is_available: boolean
+    unique_station_codes?: number
+    map_query_ready?: boolean
+    real_map_placement_ready?: boolean
+    is_available?: boolean
   }
   stations: {
     total: number
-    missing_coordinates: number
-    candidate_count: number
-    approved_count: number
+    coordinate_status?: string
+    has_coordinates?: boolean
+    missing_coordinate_stations?: number
+    missing_coordinates?: number
+    candidate_count?: number
+    approved_count?: number
   }
   reservoir_water_levels: {
     quality_role: 'status_summary_only'
@@ -125,7 +139,9 @@ export interface DataStatusResponse {
   }
   data_freshness: {
     status: string
-    label: string
+    label?: string
+    message?: string
+    latest_observed_at?: string | null
   }
 }
 
