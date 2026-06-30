@@ -1,0 +1,23 @@
+{
+  "feature_file": "data/features/flood_water_level_features_day13.csv",
+  "total_records": 4101063,
+  "station_count": 148,
+  "null_water_level_count": 0,
+  "zero_water_level_count": 3159438,
+  "nonzero_water_level_count": 941625,
+  "abnormal_interval_count": 212739,
+  "instant_jump_candidate_count": 47,
+  "station_sample_distribution": {
+    "min": 4362,
+    "p25": 9475,
+    "median": 29011,
+    "p75": 35571,
+    "max": 86001,
+    "average": 27709.89
+  },
+  "thresholds": {
+    "abnormal_interval_seconds": 21600,
+    "instant_jump_delta_m": 0.2,
+    "instant_jump_max_seconds": 3600
+  }
+}
